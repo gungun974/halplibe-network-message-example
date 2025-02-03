@@ -7,19 +7,24 @@ import net.minecraft.core.entity.player.Player;
 import net.minecraft.core.net.packet.Packet;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.entity.player.PlayerServer;
+import org.jetbrains.annotations.NotNull;
+import turniplabs.examplemod.ExampleMod;
 import turniplabs.halplibe.helper.EnvironmentHelper;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.lang.reflect.InvocationTargetException;
+import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
 public final class NetworkHandler
 {
-	private static final Map<Integer, BiConsumer<NetworkMessage.NetworkContext, UniversalPacket>> packetReaders = new HashMap<>();
-	private static final Map<String, Short> modIds = new HashMap<>();
-	private static final Map<Class<?>, Integer> packetIds = new HashMap<>();
+	private static final List<Supplier<NetworkMessage>> messagesToRegisterForServer = new LinkedList<>(Collections.singletonList(
+		MessageIdsNetworkMessage::new
+	));
+
+	private static final Map<Short, BiConsumer<NetworkMessage.NetworkContext, UniversalPacket>> packetReaders = new HashMap<>();
+	private static final Map<Class<?>, Short> packetIds = new HashMap<>();
 
 	private NetworkHandler()
 	{
@@ -28,13 +33,53 @@ public final class NetworkHandler
 	public static void setup()
 	{
 		Packet.addMapping (88,  true, true, UniversalPacket.class );
+
+		register();
+	}
+
+	public static void register()
+	{
+		packetReaders.clear();
+		packetIds.clear();
+
+		for (Supplier<NetworkMessage> networkMessage : messagesToRegisterForServer) {
+			addNetworkMessage(networkMessage);
+		}
 	}
 
 	public static void receiveUniversalPacket(NetworkMessage.NetworkContext context, UniversalPacket buffer )
 	{
-		int type = buffer.readInt();
+		short type = buffer.readShort();
+
+		if (!packetReaders.containsKey(type)) {
+			return;
+		}
+
 		packetReaders.get( type )
 			.accept( context, buffer );
+	}
+
+	/**
+	 * Register a NetworkMessage, and a thread-unsafe handler for it.
+	 *
+	 * @param factory The factory for this type of message.
+	 */
+	@SuppressWarnings({"unused"})
+	public static void registerNetworkMessage( Supplier<NetworkMessage> factory )
+	{
+		messagesToRegisterForServer.add(factory);
+	}
+
+	/**
+	 * Register a NetworkMessage, and a thread-unsafe handler for it.
+	 *
+	 * @param <T>     The type of the NetworkMessage to send.
+	 * @param factory The factory for this type of message.
+	 */
+	@SuppressWarnings({"unused"})
+	public static <T extends NetworkMessage> void addNetworkMessage( Supplier<T> factory )
+	{
+		registerNetworkMessage((short) packetIds.size(), factory);
 	}
 
 	/**
@@ -45,16 +90,9 @@ public final class NetworkHandler
 	 * @param factory The factory for this type of message.
 	 */
 	@SuppressWarnings({"unused"})
-	public static <T extends NetworkMessage> void registerNetworkMessage( String modId, int id, Supplier<T> factory )
+	private static <T extends NetworkMessage> void registerNetworkMessage( short id, Supplier<T> factory )
 	{
-		if (!modIds.containsKey(modId)) {
-			modIds.put(modId, (short)modId.length());
-		}
-
-		final int high = (modIds.get(modId) & 0xFFFF) << 16;
-		final int low = id & 0xFFFF;
-
-		registerNetworkMessage( high | low, getType( factory ), buf -> {
+		registerNetworkMessage( id, getType( factory ), buf -> {
 			T instance = factory.get();
 			instance.decodeFromUniversalPacket( buf );
 			return instance;
@@ -69,7 +107,7 @@ public final class NetworkHandler
 	 * @param id      The identifier for this message type
 	 * @param decoder The factory for this type of message.
 	 */
-	private static <T extends NetworkMessage> void registerNetworkMessage( int id, Class<T> type, Function<UniversalPacket, T> decoder )
+	private static <T extends NetworkMessage> void registerNetworkMessage( short id, Class<T> type, Function<UniversalPacket, T> decoder )
 	{
 		packetIds.put( type, id );
 		packetReaders.put( id, ( context, buf ) -> {
@@ -88,7 +126,7 @@ public final class NetworkHandler
 	private static UniversalPacket encode(NetworkMessage message )
 	{
 		UniversalPacket buf = new UniversalPacket();
-		buf.writeInt( packetIds.get( message.getClass() ) );
+		buf.writeShort( packetIds.get( message.getClass() ) );
 		message.encodeToUniversalPacket( buf );
 		return buf;
 	}
@@ -100,9 +138,15 @@ public final class NetworkHandler
 	}
 
 	@Environment(EnvType.SERVER)
-	private static void sendToPlayerServer(Player player, NetworkMessage message )
+	private static void sendToPlayerServer(Player player, NetworkMessage message)
 	{
 		((PlayerServer)player).playerNetServerHandler.sendPacket(encode(message));
+	}
+
+	@Environment(EnvType.SERVER)
+	public static void sendToPlayerMessagesConfiguration(Player player)
+	{
+		((PlayerServer)player).playerNetServerHandler.sendPacket(encode(new MessageIdsNetworkMessage(packetIds)));
 	}
 
 	/**
@@ -160,5 +204,71 @@ public final class NetworkHandler
 			return;
 		}
 		MinecraftServer.getInstance().playerList.sendPacketToPlayersAroundPoint(x, y, z, radius, dimension, encode(message));
+	}
+
+	private static class MessageIdsNetworkMessage implements NetworkMessage{
+			Map<Class<?>, Short> packetIds;
+
+			public MessageIdsNetworkMessage() {}
+
+			public MessageIdsNetworkMessage(Map<Class<?>, Short> packetIds) {
+				this.packetIds = packetIds;
+			}
+
+			@Override
+			public void encodeToUniversalPacket(@NotNull UniversalPacket packet) {
+				packet.writeShort((short) packetIds.size());
+
+				for (Map.Entry<Class<?>, Short> entry : packetIds.entrySet()) {
+					packet.writeShort(entry.getValue());
+					packet.writeString(entry.getKey().getName());
+				}
+			}
+
+			@Override
+			public void decodeFromUniversalPacket(@NotNull UniversalPacket packet) {
+				this.packetIds = new HashMap<>();
+
+				final short size = packet.readShort();
+
+				try {
+					for (int i = 0; i < size; i++) {
+						final short id = packet.readShort();
+						final Class<?> messageClass = Class.forName(packet.readString());
+
+						this.packetIds.put(messageClass, id);
+					}
+				} catch (ClassNotFoundException e) {
+					throw new RuntimeException(e);
+				}
+			}
+
+		@Override
+		public void handle(NetworkContext context) {
+			ExampleMod.LOGGER.info("hoi");
+
+			try {
+				NetworkHandler.packetReaders.clear();
+				NetworkHandler.packetIds.clear();
+
+				for (Map.Entry<Class<?>, Short> entry : packetIds.entrySet()) {
+					Class<?> klass = entry.getKey();
+					if (NetworkMessage.class.isAssignableFrom(klass)) {
+						Supplier<NetworkMessage> supplier = () -> {
+							try {
+								return (NetworkMessage) klass.getDeclaredConstructor().newInstance();
+							} catch (InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+								throw new RuntimeException(e);
+							}
+						};
+						NetworkHandler.registerNetworkMessage(entry.getValue(), supplier);
+					} else {
+						throw new IllegalArgumentException("Class " + klass.getName() + " does not extend NetworkMessage");
+					}
+				}
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		}
 	}
 }
