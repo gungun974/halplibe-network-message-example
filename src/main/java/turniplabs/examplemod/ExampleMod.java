@@ -15,7 +15,7 @@ public class ExampleMod implements ModInitializer, RecipeEntrypoint, GameStartEn
     public void onInitialize() {
         LOGGER.info("ExampleMod initialized.");
 
-		NetworkHandler.registerNetworkMessage(MOD_ID, 0, OpenInventoryNetworkMessage::new);
+		NetworkHandler.registerNetworkMessage(OpenInventoryNetworkMessage::new);
     }
 
 	@Override
