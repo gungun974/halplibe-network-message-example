@@ -3,7 +3,7 @@ package turniplabs.examplemod;
 import net.fabricmc.api.ModInitializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import turniplabs.halplibe.util.ClientStartEntrypoint;
+import turniplabs.halplibe.helper.network.NetworkHandler;
 import turniplabs.halplibe.util.GameStartEntrypoint;
 import turniplabs.halplibe.util.RecipeEntrypoint;
 
@@ -14,6 +14,8 @@ public class ExampleMod implements ModInitializer, RecipeEntrypoint, GameStartEn
     @Override
     public void onInitialize() {
         LOGGER.info("ExampleMod initialized.");
+
+		NetworkHandler.registerNetworkMessage(MOD_ID, 0, OpenInventoryNetworkMessage::new);
     }
 
 	@Override

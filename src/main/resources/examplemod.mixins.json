@@ -4,6 +4,7 @@
     "package": "turniplabs.examplemod.mixin",
     "compatibilityLevel": "JAVA_8",
     "mixins": [
+      "CommandManagerMixin"
     ],
     "client": [
     ],

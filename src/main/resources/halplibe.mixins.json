@@ -1,0 +1,33 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "turniplabs.halplibe.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [
+    "I18nMixin",
+    "MinecraftMixin",
+    "MinecraftServerMixin",
+    "MobCreeperMixin",
+    "accessors.BlockAccessor",
+    "accessors.BlocksAccessor",
+    "accessors.EntityFireflyFXAccessor",
+    "accessors.EntityFXAccessor",
+    "accessors.LanguageAccessor",
+    "accessors.WeightedRandomBagAccessor",
+    "accessors.WeightedRandomBagEntryAccessor",
+    "accessors.PacketHandlerServerAccessor"
+  ],
+  "client": [
+    "PacketHandlerClientMixin",
+    "models.BlockColorDispatcherMixin",
+    "models.BlockModelDispatcherMixin",
+    "models.EntityRenderDispatcherMixin",
+    "models.ItemModelDispatcherMixin",
+    "models.TileEntityRendererDispatcherMixin"
+  ],
+  "server": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

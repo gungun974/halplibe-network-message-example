@@ -1,24 +1,25 @@
 {
   "schemaVersion": 1,
-  "id": "examplemod",
+  "id": "halplibe",
   "version": "${version}",
 
-  "name": "Example Mod",
-  "description": "This mod aims to help new BTA modders.",
+  "name": "HalpLibe",
+  "description": "Helper library containing functions for common use cases, while ensuring compatibility between mods.",
   "authors": [
     "Turnip Labs"
   ],
   "contact": {
     "homepage": "",
-    "sources": ""
+    "sources": "https://github.com/Turnip-Labs/bta-halplibe"
   },
 
-	"icon": "icon.png",
+  "icon": "icon.png",
   "license": "CC0-1.0",
 
   "environment": "*",
   "entrypoints": {
     "main": [
+      "turniplabs.halplibe.HalpLibe",
 			"turniplabs.examplemod.ExampleMod"
     ],
 		"beforeGameStart": [
@@ -29,16 +30,21 @@
 		],
 		"recipesReady": [
 			"turniplabs.examplemod.ExampleMod"
-		]
-	},
+		],
+    "preLaunch": [
+      "turniplabs.halplibe.HalpLibe"
+    ]
+  },
   "mixins": [
-      "examplemod.mixins.json"
+      "halplibe.mixins.json",
+		"examplemod.mixins.json"
   ],
 
   "depends": {
-		"minecraft": "*",
-    "fabricloader": ">=0.15.5"
   },
   "suggests": {
+  },
+  "custom": {
+    "modmenu:api": true
   }
 }
